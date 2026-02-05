@@ -1,0 +1,61 @@
+# Credit Risk Prediction Pipeline Configuration
+
+# LLM Settings
+llm:
+  provider: "anthropic"  # Options: openai, anthropic, local
+  model: "claude-3-5-sonnet-20241022"  # Claude 3.5 Sonnet (latest)
+  temperature: 0.1
+  max_tokens: 4000
+
+# Data Sources
+data_sources:
+  # Financial data
+  financial:
+    provider: "yahoo"  # Yahoo Finance
+    metrics:
+      - "debt_to_equity"
+      - "current_ratio"
+      - "operating_margin"
+      - "roe"
+      - "free_cash_flow"
+
+  # News sources
+  news:
+    max_articles: 20
+    days_lookback: 7
+
+  # Market data
+  market:
+    indicators:
+      - "price_change_1w"
+      - "price_change_1m"
+      - "volume_change"
+      - "volatility"
+
+# Risk Prediction Settings
+prediction:
+  lookback_days: 90        # How many days of history to consider
+  prediction_horizon: 7    # Predict risk for next N days
+  risk_threshold: 0.6      # Threshold for flagging high risk (0-1)
+  top_k_companies: 20      # Number of top risky companies to output
+
+# Company Selection
+companies:
+  # Default test companies (mix of US and Chinese companies)
+  test_set:
+    - "TSLA"   # Tesla
+    - "BABA"   # Alibaba
+    - "NIO"    # NIO
+    - "BIDU"   # Baidu
+    - "AMC"    # AMC Entertainment
+    - "GME"    # GameStop
+
+  # Can be loaded from file
+  from_file: null  # Path to CSV with company tickers
+
+# Output Settings
+output:
+  format: "json"  # json, csv, both
+  save_path: "data/results"
+  include_explanation: true
+  include_confidence: true

@@ -43,6 +43,7 @@ htmlcov/
 .coverage
 .coverage.*
 .cache
+.claude
 nosetests.xml
 coverage.xml
 *.cover
@@ -205,3 +206,20 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project specific
+# Data files
+data/raw/*
+data/processed/*
+data/results/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/results/.gitkeep
+
+# Logs
+*.log
+
+# API keys and secrets
+.env
+.env.local
+secrets.yaml
