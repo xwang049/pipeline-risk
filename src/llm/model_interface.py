@@ -32,12 +32,14 @@ class LLMInterface:
         self.temperature = temperature
         self.max_tokens = max_tokens
 
-        # Set default models
+        # Set default models (using cost-effective options)
         if model is None:
             if self.provider == "openai":
-                self.model = "gpt-4"
+                self.model = "gpt-4o-mini"  # Cheaper than GPT-4 (~$0.15/1M tokens)
             elif self.provider == "anthropic":
-                self.model = "claude-3-sonnet-20240229"
+                self.model = "claude-3-5-haiku-20241022"  # Cheapest Claude (~$1/1M tokens)
+            elif self.provider == "gemini":
+                self.model = "models/gemini-2.5-flash"  # Fast and free in quota
             else:
                 self.model = "default"
         else:
@@ -78,6 +80,20 @@ class LLMInterface:
             except ImportError:
                 raise ImportError("anthropic package not installed")
 
+        elif self.provider == "gemini":
+            try:
+                import google.generativeai as genai
+
+                api_key = os.getenv("GEMINI_API_KEY")
+                if not api_key:
+                    raise ValueError(
+                        "GEMINI_API_KEY not found in environment variables"
+                    )
+                genai.configure(api_key=api_key)
+                self.client = genai
+            except ImportError:
+                raise ImportError("google-generativeai package not installed")
+
         elif self.provider == "local":
             # For local models (e.g., via Ollama or vLLM)
             logger.warning("Local model support not yet implemented")
@@ -102,6 +118,8 @@ class LLMInterface:
                 return self._generate_openai(prompt, system_prompt)
             elif self.provider == "anthropic":
                 return self._generate_anthropic(prompt, system_prompt)
+            elif self.provider == "gemini":
+                return self._generate_gemini(prompt, system_prompt)
             elif self.provider == "local":
                 return self._generate_local(prompt, system_prompt)
             else:
@@ -146,6 +164,24 @@ class LLMInterface:
         response = self.client.messages.create(**kwargs)
 
         return response.content[0].text
+
+    def _generate_gemini(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """Generate completion using Gemini API"""
+        # Combine system prompt and user prompt for Gemini
+        full_prompt = prompt
+        if system_prompt:
+            full_prompt = f"{system_prompt}\n\n{prompt}"
+
+        model = self.client.GenerativeModel(
+            model_name=self.model,
+            generation_config={
+                "temperature": self.temperature,
+                "max_output_tokens": self.max_tokens,
+            }
+        )
+
+        response = model.generate_content(full_prompt)
+        return response.text
 
     def _generate_local(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """Generate completion using local model"""

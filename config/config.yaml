@@ -1,9 +1,12 @@
 # Credit Risk Prediction Pipeline Configuration
 
-# LLM Settings
+# LLM Settings (using cost-effective models)
 llm:
-  provider: "anthropic"  # Options: openai, anthropic, local
-  model: "claude-3-5-sonnet-20241022"  # Claude 3.5 Sonnet (latest)
+  provider: "gemini"  # Options: gemini, openai, anthropic
+  model: "models/gemini-2.5-flash"  # Gemini 2.5 Flash (免费额度内)
+  # Other cost-effective options:
+  # model: "gpt-4o-mini"              # OpenAI (~$0.15/1M tokens)
+  # model: "claude-3-5-haiku-20241022" # Anthropic (~$1/1M tokens)
   temperature: 0.1
   max_tokens: 4000
 
@@ -37,20 +40,16 @@ prediction:
   lookback_days: 90        # How many days of history to consider
   prediction_horizon: 7    # Predict risk for next N days
   risk_threshold: 0.6      # Threshold for flagging high risk (0-1)
-  top_k_companies: 20      # Number of top risky companies to output
+  top_k_companies: 5       # Number of companies to analyze (keep ≤5 for free tier)
 
-# Company Selection
+# Company Selection (Automatic Mode)
 companies:
-  # Default test companies (mix of US and Chinese companies)
-  test_set:
-    - "TSLA"   # Tesla
-    - "BABA"   # Alibaba
-    - "NIO"    # NIO
-    - "BIDU"   # Baidu
-    - "AMC"    # AMC Entertainment
-    - "GME"    # GameStop
+  # LLM will automatically select high-risk companies based on current market
+  # No manual list needed - companies are chosen dynamically
 
-  # Can be loaded from file
+  market: "US"  # Market scope: US, China, or Global
+
+  # Optional: Load specific companies from file if needed
   from_file: null  # Path to CSV with company tickers
 
 # Output Settings
