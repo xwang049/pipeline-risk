@@ -5,6 +5,7 @@ Uses LLM to automatically select high-risk companies based on current market con
 """
 
 import yaml
+import argparse
 from pathlib import Path
 from loguru import logger
 import sys
@@ -21,6 +22,56 @@ from src.pipeline import CreditRiskPredictor, CompanySelector
 from src.llm import LLMInterface
 
 
+def parse_args():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(
+        description="Credit Risk Prediction Pipeline with Time-Travel Backtesting",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Real-time mode (use current date)
+  python main.py
+
+  # Backtest mode (simulate past date)
+  python main.py --as-of-date 2026-02-01
+  python main.py --as-of-date 2026-01-15
+
+  # Specify number of companies
+  python main.py --companies 10
+
+  # Combine options
+  python main.py --as-of-date 2026-02-01 --companies 10
+        """
+    )
+
+    parser.add_argument(
+        "--as-of-date",
+        type=str,
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Simulate as if today is this date (for backtesting). Example: 2026-02-01"
+    )
+
+    parser.add_argument(
+        "--companies",
+        "-n",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Number of companies to analyze (default: from config)"
+    )
+
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config/config.yaml",
+        metavar="PATH",
+        help="Path to config file (default: config/config.yaml)"
+    )
+
+    return parser.parse_args()
+
+
 def load_config(config_path: str = "config/config.yaml") -> dict:
     """Load configuration from YAML file"""
     with open(config_path, "r", encoding="utf-8") as f:
@@ -30,20 +81,29 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
 
 def main():
     """Main entry point with automatic company selection"""
+    # Parse command line arguments
+    args = parse_args()
+
     logger.info("=" * 60)
     logger.info("Credit Risk Prediction Pipeline - Auto Mode")
     logger.info("LLM will select high-risk companies based on current market")
     logger.info("=" * 60)
 
     # Load configuration
-    config = load_config()
+    config = load_config(args.config)
 
-    # Get time-travel parameter for backtesting
-    as_of_date = config.get("prediction", {}).get("as_of_date")
+    # Command line arguments override config
+    # Get time-travel parameter (CLI > config file)
+    as_of_date = args.as_of_date if args.as_of_date else config.get("prediction", {}).get("as_of_date")
+
     if as_of_date:
         logger.info(f"\n⏰ TIME-TRAVEL MODE: Simulating as of {as_of_date}")
         logger.info(f"   Only using data available before {as_of_date}")
         logger.info(f"   Predicting risk for next 7 days from {as_of_date}")
+        if args.as_of_date:
+            logger.info(f"   (set via command line)")
+        else:
+            logger.info(f"   (set via config file)")
     else:
         from datetime import datetime
         as_of_date = datetime.now().strftime("%Y-%m-%d")
@@ -65,8 +125,8 @@ def main():
 
     selector = CompanySelector(llm)
 
-    # Get number of companies from config or default to 10
-    num_companies = config.get("prediction", {}).get("top_k_companies", 10)
+    # Get number of companies (CLI > config > default)
+    num_companies = args.companies if args.companies else config.get("prediction", {}).get("top_k_companies", 10)
 
     # Get market from config or default to US
     market = config.get("companies", {}).get("market", "US")
