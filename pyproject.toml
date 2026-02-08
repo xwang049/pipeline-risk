@@ -19,4 +19,5 @@ dependencies = [
     "httpx>=0.24.0",
     "yfinance>=0.2.0",
     "aiohttp>=3.9.0",
+    "prefect>=2.14.0",
 ]
