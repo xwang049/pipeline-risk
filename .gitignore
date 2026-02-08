@@ -223,3 +223,7 @@ data/results/*
 .env
 .env.local
 secrets.yaml
+
+# Test files
+test_*.py
+example_*.py

@@ -189,7 +189,7 @@ class LLMInterface:
 
     def parse_json_response(self, response: str) -> Dict[str, Any]:
         """
-        Parse JSON response from LLM
+        Parse JSON response from LLM with improved error handling
 
         Args:
             response: Raw LLM response
@@ -197,33 +197,117 @@ class LLMInterface:
         Returns:
             Parsed JSON dictionary
         """
-        try:
-            # Try to find JSON block in markdown format
-            if "```json" in response:
-                start = response.find("```json") + 7
-                end = response.find("```", start)
-                json_str = response[start:end].strip()
-            elif "```" in response:
-                start = response.find("```") + 3
-                end = response.find("```", start)
-                json_str = response[start:end].strip()
+        # Strategy 1: Extract from markdown code blocks
+        json_str = self._extract_json_from_markdown(response)
+
+        # Strategy 2: Try to parse as-is
+        if not json_str:
+            json_str = response.strip()
+
+        # Strategy 3: Try multiple parsing approaches
+        parse_attempts = [
+            ("Direct parse", lambda s: json.loads(s)),
+            ("Fix truncated strings", lambda s: json.loads(self._fix_truncated_json(s))),
+            ("Strip whitespace", lambda s: json.loads(s.strip())),
+            ("Remove trailing comma", lambda s: json.loads(s.rstrip(',').rstrip())),
+        ]
+
+        for attempt_name, parse_func in parse_attempts:
+            try:
+                result = parse_func(json_str)
+                logger.debug(f"JSON parsed successfully using: {attempt_name}")
+                return result
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.debug(f"{attempt_name} failed: {e}")
+                continue
+
+        # All strategies failed - log and return default
+        logger.error(f"All JSON parsing strategies failed")
+        logger.debug(f"Raw response (first 500 chars): {response[:500]}")
+
+        return {
+            "risk_score": 50,
+            "risk_level": "Moderate",
+            "key_risk_factors": ["Unable to parse response"],
+            "confidence_level": "Low",
+            "reasoning": "Failed to parse LLM response",
+            "raw_response": response,
+        }
+
+    def _extract_json_from_markdown(self, response: str) -> str:
+        """
+        Extract JSON from markdown code blocks
+
+        Handles formats like:
+        - ```json { ... } ```
+        - ``` { ... } ```
+        - { ... }
+        """
+        # Try to find JSON in markdown code block
+        if "```json" in response:
+            start = response.find("```json") + 7
+            end = response.find("```", start)
+            if end == -1:  # No closing ``` - response truncated
+                json_str = response[start:].strip()
             else:
-                json_str = response.strip()
+                json_str = response[start:end].strip()
+            return json_str
 
-            return json.loads(json_str)
+        elif "```" in response:
+            start = response.find("```") + 3
+            end = response.find("```", start)
+            if end == -1:  # No closing ``` - response truncated
+                json_str = response[start:].strip()
+            else:
+                json_str = response[start:end].strip()
+            return json_str
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON response: {e}")
-            logger.debug(f"Raw response: {response}")
-            # Return a default structure
-            return {
-                "risk_score": 50,
-                "risk_level": "Moderate",
-                "key_risk_factors": ["Unable to parse response"],
-                "confidence_level": "Low",
-                "reasoning": "Failed to parse LLM response",
-                "raw_response": response,
-            }
+        # No code blocks found - try to find JSON object boundaries
+        # Look for outermost { ... }
+        first_brace = response.find('{')
+        if first_brace != -1:
+            # Find matching closing brace (simple approach)
+            last_brace = response.rfind('}')
+            if last_brace > first_brace:
+                return response[first_brace:last_brace+1]
+
+        return response.strip()
+
+    def _fix_truncated_json(self, json_str: str) -> str:
+        """
+        Attempt to fix common JSON truncation issues
+
+        Args:
+            json_str: Potentially truncated JSON string
+
+        Returns:
+            Fixed JSON string
+        """
+        import re
+
+        # If JSON ends with unclosed string, try to close it
+        # Pattern: "key": "value without closing quote
+        if re.search(r':\s*"[^"]*$', json_str):
+            json_str += '"'
+
+        # Count braces and brackets
+        open_braces = json_str.count('{')
+        close_braces = json_str.count('}')
+        open_brackets = json_str.count('[')
+        close_brackets = json_str.count(']')
+
+        # Add missing closing braces
+        if open_braces > close_braces:
+            json_str += '}' * (open_braces - close_braces)
+
+        # Add missing closing brackets
+        if open_brackets > close_brackets:
+            json_str += ']' * (open_brackets - close_brackets)
+
+        # Remove trailing commas before closing braces/brackets
+        json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+
+        return json_str
 
     def analyze_credit_risk(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
         """
