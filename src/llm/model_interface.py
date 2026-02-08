@@ -309,19 +309,27 @@ class LLMInterface:
 
         return json_str
 
-    def analyze_credit_risk(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_credit_risk(self, company_data: Dict[str, Any],
+                            as_of_date: str = None,
+                            weights: Dict = None) -> Dict[str, Any]:
         """
         Analyze credit risk for a company
 
         Args:
             company_data: Company information dictionary
+            as_of_date: Date to simulate (YYYY-MM-DD), None for current
+            weights: Feature weights dict
 
         Returns:
             Risk analysis results
         """
         from .prompt_templates import PromptTemplates
 
-        prompt = PromptTemplates.credit_risk_analysis_prompt(company_data)
+        prompt = PromptTemplates.credit_risk_analysis_prompt(
+            company_data,
+            as_of_date=as_of_date,
+            weights=weights
+        )
         system_prompt = (
             "You are an expert credit risk analyst with deep knowledge of "
             "financial markets, credit rating methodologies, and risk assessment."

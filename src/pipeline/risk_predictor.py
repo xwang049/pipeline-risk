@@ -19,17 +19,29 @@ from ..llm import LLMInterface
 class CreditRiskPredictor:
     """Main pipeline for credit risk prediction"""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], as_of_date: str = None):
         """
         Initialize the credit risk predictor
 
         Args:
             config: Configuration dictionary
+            as_of_date: Simulate as if today is this date (YYYY-MM-DD)
         """
         self.config = config
+        self.as_of_date = as_of_date
         self.llm = self._init_llm()
 
-        logger.info("Credit Risk Predictor initialized")
+        # Get feature weights from config
+        self.weights = config.get("prediction", {}).get("weights", {
+            "financial_metrics": 0.50,
+            "market_signals": 0.35,
+            "news_sentiment": 0.15
+        })
+
+        if as_of_date:
+            logger.info(f"Credit Risk Predictor initialized (as of {as_of_date})")
+        else:
+            logger.info("Credit Risk Predictor initialized")
 
     def _init_llm(self) -> LLMInterface:
         """Initialize LLM interface from config"""
@@ -44,13 +56,13 @@ class CreditRiskPredictor:
 
     def collect_company_data(self, ticker: str) -> Dict[str, Any]:
         """
-        Collect all data for a company
+        Collect all data for a company (respecting as_of_date constraint)
 
         Args:
             ticker: Company ticker symbol
 
         Returns:
-            Dictionary with all collected data
+            Dictionary with all collected data (filtered by as_of_date)
         """
         logger.info(f"Collecting data for {ticker}")
 
@@ -58,7 +70,15 @@ class CreditRiskPredictor:
         company_info = CompanyInfoCollector.get_company_info(ticker)
         financial_metrics = FinancialDataCollector.get_financial_metrics(ticker)
         market_data = MarketDataCollector.get_market_indicators(ticker)
-        news_articles = NewsCollector.get_company_news(ticker, max_articles=20)
+
+        # Get news with time constraint
+        news_config = self.config.get("data_sources", {}).get("news", {})
+        max_articles = news_config.get("max_articles", 20)
+        news_articles = NewsCollector.get_company_news(ticker, max_articles=max_articles)
+
+        # Filter news by as_of_date if specified
+        if self.as_of_date:
+            news_articles = self._filter_news_by_date(news_articles, self.as_of_date)
 
         # Additional analysis
         news_sentiment = NewsCollector.analyze_news_sentiment(news_articles)
@@ -104,8 +124,12 @@ class CreditRiskPredictor:
         # Collect data
         company_data = self.collect_company_data(ticker)
 
-        # Analyze with LLM
-        risk_analysis = self.llm.analyze_credit_risk(company_data)
+        # Analyze with LLM (passing time constraint and weights)
+        risk_analysis = self.llm.analyze_credit_risk(
+            company_data,
+            as_of_date=self.as_of_date,
+            weights=self.weights
+        )
 
         # Add additional context
         risk_analysis["data_quality"] = self._assess_data_quality(company_data)
@@ -288,3 +312,54 @@ class CreditRiskPredictor:
         signals["risk_indicators"] = risk_indicators
 
         return signals
+
+    def _filter_news_by_date(self, news_articles: List[Dict], as_of_date: str) -> List[Dict]:
+        """
+        Filter news articles to only include those published before as_of_date
+
+        Args:
+            news_articles: List of news articles
+            as_of_date: Cut-off date (YYYY-MM-DD)
+
+        Returns:
+            Filtered list of news articles
+        """
+        from datetime import datetime
+
+        try:
+            cutoff = datetime.strptime(as_of_date, "%Y-%m-%d")
+        except ValueError:
+            logger.warning(f"Invalid as_of_date format: {as_of_date}")
+            return news_articles
+
+        filtered = []
+        for article in news_articles:
+            pub_date_str = article.get("published_date")
+            if not pub_date_str:
+                continue
+
+            try:
+                # Parse various date formats
+                for fmt in ["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"]:
+                    try:
+                        pub_date = datetime.strptime(pub_date_str[:19], fmt)
+                        break
+                    except ValueError:
+                        continue
+                else:
+                    # If no format worked, try ISO format
+                    pub_date = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00'))
+                    pub_date = pub_date.replace(tzinfo=None)  # Make naive
+
+                # Only include articles published before as_of_date
+                if pub_date <= cutoff:
+                    filtered.append(article)
+                else:
+                    logger.debug(f"Filtered out news from {pub_date_str} (after {as_of_date})")
+
+            except Exception as e:
+                logger.debug(f"Could not parse date {pub_date_str}: {e}")
+                continue
+
+        logger.info(f"Filtered news: {len(news_articles)} -> {len(filtered)} articles (before {as_of_date})")
+        return filtered

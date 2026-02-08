@@ -7,7 +7,7 @@ class PromptTemplates:
     """Templates for various LLM prompts"""
 
     @staticmethod
-    def credit_risk_analysis_prompt(company_data: Dict[str, Any]) -> str:
+    def credit_risk_analysis_prompt(company_data: Dict[str, Any], as_of_date: str = None, weights: Dict = None) -> str:
         """
         Generate a comprehensive credit risk analysis prompt
 
@@ -19,6 +19,8 @@ class PromptTemplates:
                 - recent_news: List of recent news articles
                 - market_data: Dict of market indicators
                 - network_info: (optional) Network relationships
+            as_of_date: Date to simulate (YYYY-MM-DD), None for current
+            weights: Feature weights dict (financial_metrics, market_signals, news_sentiment)
 
         Returns:
             Formatted prompt string
@@ -29,8 +31,26 @@ class PromptTemplates:
         recent_news = company_data.get("recent_news", [])
         market_data = company_data.get("market_data", {})
 
-        prompt = f"""You are a senior credit risk analyst. Analyze the following company and predict its credit risk for the next 7 days.
+        # Default weights if not provided
+        if weights is None:
+            weights = {
+                "financial_metrics": 0.50,
+                "market_signals": 0.35,
+                "news_sentiment": 0.15
+            }
 
+        # Time constraint if backtesting
+        time_note = ""
+        if as_of_date:
+            time_note = f"""
+🔒 TIME CONSTRAINT: You are analyzing as of {as_of_date}.
+   - Only use information available BEFORE {as_of_date}
+   - Predict risk for the 7 days AFTER {as_of_date}
+   - DO NOT use any information from after {as_of_date}
+"""
+
+        prompt = f"""You are a senior credit risk analyst. Analyze the following company and predict its credit risk for the next 7 days.
+{time_note}
 Company: {name} ({ticker})
 
 ## Financial Metrics:
@@ -41,6 +61,17 @@ Company: {name} ({ticker})
 
 ## Recent News (Last 7 Days):
 {PromptTemplates._format_news(recent_news)}
+
+## Analysis Guidelines:
+
+**Feature Weights** (use these to prioritize your analysis):
+- Financial Metrics: {weights['financial_metrics']*100:.0f}% - MOST IMPORTANT (debt, cash flow, profitability)
+- Market Signals: {weights['market_signals']*100:.0f}% - IMPORTANT (price movements, volatility)
+- News Sentiment: {weights['news_sentiment']*100:.0f}% - LEAST IMPORTANT (often noise, use with caution)
+
+⚠️  **Important**: News sentiment should have MINIMAL weight in your final score.
+Focus primarily on hard financial data and market signals. News is often reactive,
+not predictive, and contains significant noise.
 
 ## Analysis Required:
 

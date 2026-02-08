@@ -37,10 +37,21 @@ data_sources:
 
 # Risk Prediction Settings
 prediction:
+  # Time-travel for backtesting
+  as_of_date: null         # Format: "YYYY-MM-DD" or null for current time
+                           # Example: "2026-02-01" - simulate as if today is Feb 1
+                           # System will ONLY use data available before this date
+
   lookback_days: 90        # How many days of history to consider
   prediction_horizon: 7    # Predict risk for next N days
   risk_threshold: 0.6      # Threshold for flagging high risk (0-1)
   top_k_companies: 5       # Number of companies to analyze (keep ≤5 for free tier)
+
+  # Feature weights for risk scoring
+  weights:
+    financial_metrics: 0.50    # Financial ratios, Z-Score (50%)
+    market_signals: 0.35       # Price movements, volatility (35%)
+    news_sentiment: 0.15       # News sentiment (15% - reduced, often noise)
 
 # Company Selection (Automatic Mode)
 companies:

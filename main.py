@@ -38,6 +38,17 @@ def main():
     # Load configuration
     config = load_config()
 
+    # Get time-travel parameter for backtesting
+    as_of_date = config.get("prediction", {}).get("as_of_date")
+    if as_of_date:
+        logger.info(f"\n⏰ TIME-TRAVEL MODE: Simulating as of {as_of_date}")
+        logger.info(f"   Only using data available before {as_of_date}")
+        logger.info(f"   Predicting risk for next 7 days from {as_of_date}")
+    else:
+        from datetime import datetime
+        as_of_date = datetime.now().strftime("%Y-%m-%d")
+        logger.info(f"\n⏰ REAL-TIME MODE: Using current date {as_of_date}")
+
     # Initialize LLM
     llm_config = config.get("llm", {})
     llm = LLMInterface(
@@ -60,9 +71,9 @@ def main():
     # Get market from config or default to US
     market = config.get("companies", {}).get("market", "US")
 
-    # Select companies using LLM
+    # Select companies using LLM (with time constraint)
     logger.info(f"\nAsking LLM to select {num_companies} high-risk companies...")
-    tickers = selector.select_high_risk_companies(num_companies, market)
+    tickers = selector.select_high_risk_companies(num_companies, market, as_of_date=as_of_date)
 
     if not tickers:
         logger.error("Failed to select companies. Exiting.")
@@ -76,8 +87,15 @@ def main():
     logger.info("STEP 2: Analyzing Selected Companies with LLM")
     logger.info("=" * 60)
 
-    # Initialize predictor
-    predictor = CreditRiskPredictor(config)
+    # Get feature weights
+    weights = config.get("prediction", {}).get("weights", {})
+    logger.info(f"\n📊 Feature Weights:")
+    logger.info(f"   Financial Metrics: {weights.get('financial_metrics', 0.5)*100:.0f}%")
+    logger.info(f"   Market Signals: {weights.get('market_signals', 0.35)*100:.0f}%")
+    logger.info(f"   News Sentiment: {weights.get('news_sentiment', 0.15)*100:.0f}% (reduced - often noise)")
+
+    # Initialize predictor with time parameter
+    predictor = CreditRiskPredictor(config, as_of_date=as_of_date)
 
     # Generate watchlist
     threshold = config.get("prediction", {}).get("risk_threshold", 0.6) * 100

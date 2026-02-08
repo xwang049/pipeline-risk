@@ -21,10 +21,10 @@ class CompanySelector:
         self.llm = llm
 
     def select_high_risk_companies(
-        self, num_companies: int = 10, market: str = "US"
+        self, num_companies: int = 10, market: str = "US", as_of_date: str = None
     ) -> List[str]:
         """
-        Use LLM to select high-risk companies based on current market conditions
+        Use LLM to select high-risk companies based on market conditions
 
         IMPORTANT: Only selects companies that are:
         1. Currently trading (not delisted/bankrupt)
@@ -34,18 +34,25 @@ class CompanySelector:
         Args:
             num_companies: Number of companies to select
             market: Market to focus on (US, China, Global)
+            as_of_date: Simulate as if today is this date (YYYY-MM-DD)
+                       If None, uses current date
 
         Returns:
             List of company ticker symbols (verified as tradeable)
         """
-        logger.info(
-            f"Using LLM to select {num_companies} high-risk companies from {market} market"
-        )
+        if as_of_date:
+            logger.info(
+                f"Using LLM to select {num_companies} high-risk companies from {market} market (as of {as_of_date})"
+            )
+        else:
+            logger.info(
+                f"Using LLM to select {num_companies} high-risk companies from {market} market"
+            )
 
         # Request more companies than needed since we'll filter out invalid ones
         request_count = num_companies * 3
 
-        prompt = self._create_selection_prompt(request_count, market)
+        prompt = self._create_selection_prompt(request_count, market, as_of_date)
         system_prompt = "You are an expert financial analyst specializing in credit risk and distressed companies."
 
         response = self.llm.generate(prompt, system_prompt)
@@ -65,11 +72,23 @@ class CompanySelector:
 
         return valid_companies[:num_companies]
 
-    def _create_selection_prompt(self, num_companies: int, market: str) -> str:
+    def _create_selection_prompt(self, num_companies: int, market: str, as_of_date: str = None) -> str:
         """Create prompt for LLM to select companies"""
-        current_date = datetime.now().strftime("%Y-%m-%d")
+        if as_of_date:
+            current_date = as_of_date
+            time_constraint = f"""
+🚨 CRITICAL TIME CONSTRAINT 🚨:
+You are simulating as if today is {as_of_date}.
+- You may ONLY use information available BEFORE {as_of_date}
+- You CANNOT use any information from AFTER {as_of_date}
+- This is for backtesting - predict based on {as_of_date} data ONLY
+"""
+        else:
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            time_constraint = ""
 
         prompt = f"""Today is {current_date}.
+{time_constraint}
 
 As a credit risk analyst, identify {num_companies} publicly traded companies in the {market} market that are at HIGH RISK of facing financial distress in the NEXT 7 DAYS.
 
