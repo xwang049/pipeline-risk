@@ -3,6 +3,7 @@
 import yfinance as yf
 from typing import Dict, Optional
 from loguru import logger
+from ..utils import cache_manager
 
 
 class FinancialDataCollector:
@@ -19,6 +20,14 @@ class FinancialDataCollector:
         Returns:
             Dictionary with financial metrics
         """
+        # Create cache key based on ticker
+        cache_key = {"ticker": ticker, "method": "get_financial_metrics"}
+        cached_result = cache_manager.get("financial_data", cache_key)
+        
+        if cached_result is not None:
+            logger.info(f"Using cached financial metrics for {ticker}")
+            return cached_result
+
         try:
             stock = yf.Ticker(ticker)
             info = stock.info
@@ -57,6 +66,10 @@ class FinancialDataCollector:
             metrics = {k: v for k, v in metrics.items() if v is not None}
 
             logger.info(f"Collected {len(metrics)} financial metrics for {ticker}")
+            
+            # Cache the result
+            cache_manager.set("financial_data", cache_key, metrics)
+            
             return metrics
 
         except Exception as e:

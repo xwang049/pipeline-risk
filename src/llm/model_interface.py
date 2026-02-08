@@ -2,6 +2,8 @@
 
 import os
 import json
+import time
+import random
 from typing import Dict, Any, Optional
 from loguru import logger
 from dotenv import load_dotenv
@@ -113,21 +115,30 @@ class LLMInterface:
         Returns:
             Generated text response
         """
-        try:
-            if self.provider == "openai":
-                return self._generate_openai(prompt, system_prompt)
-            elif self.provider == "anthropic":
-                return self._generate_anthropic(prompt, system_prompt)
-            elif self.provider == "gemini":
-                return self._generate_gemini(prompt, system_prompt)
-            elif self.provider == "local":
-                return self._generate_local(prompt, system_prompt)
-            else:
-                raise ValueError(f"Unknown provider: {self.provider}")
+        # Implement retry mechanism with exponential backoff
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                if self.provider == "openai":
+                    return self._generate_openai(prompt, system_prompt)
+                elif self.provider == "anthropic":
+                    return self._generate_anthropic(prompt, system_prompt)
+                elif self.provider == "gemini":
+                    return self._generate_gemini(prompt, system_prompt)
+                elif self.provider == "local":
+                    return self._generate_local(prompt, system_prompt)
+                else:
+                    raise ValueError(f"Unknown provider: {self.provider}")
 
-        except Exception as e:
-            logger.error(f"Error generating completion: {e}")
-            raise
+            except Exception as e:
+                logger.warning(f"LLM generation attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:  # Don't sleep on the last attempt
+                    # Exponential backoff with jitter
+                    delay = (2 ** attempt) + random.uniform(0.1, 1.0)
+                    time.sleep(delay)
+                else:
+                    logger.error(f"All {max_retries} LLM generation attempts failed: {e}")
+                    raise
 
     def _generate_openai(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """Generate completion using OpenAI API"""

@@ -1,6 +1,8 @@
 """Credit Risk Prediction Pipeline"""
 
 import json
+import time
+import random
 from typing import List, Dict, Any
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +16,7 @@ from ..data_collector import (
 )
 from ..features import FinancialFeatureExtractor
 from ..llm import LLMInterface
+from ..utils import cache_manager
 
 
 class CreditRiskPredictor:
@@ -121,23 +124,69 @@ class CreditRiskPredictor:
         """
         logger.info(f"Predicting risk for {ticker}")
 
-        # Collect data
-        company_data = self.collect_company_data(ticker)
+        # Create cache key based on ticker and as_of_date
+        cache_key = {
+            "ticker": ticker,
+            "as_of_date": self.as_of_date,
+            "method": "predict_risk"
+        }
+        cached_result = cache_manager.get("risk_prediction", cache_key)
+        
+        if cached_result is not None:
+            logger.info(f"Using cached risk prediction for {ticker}")
+            return cached_result
 
-        # Analyze with LLM (passing time constraint and weights)
-        risk_analysis = self.llm.analyze_credit_risk(
-            company_data,
-            as_of_date=self.as_of_date,
-            weights=self.weights
-        )
+        # Implement retry mechanism with exponential backoff
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Collect data
+                company_data = self.collect_company_data(ticker)
 
-        # Add additional context
-        risk_analysis["data_quality"] = self._assess_data_quality(company_data)
-        risk_analysis["traditional_signals"] = self._get_traditional_signals(
-            company_data
-        )
+                # Analyze with LLM (passing time constraint and weights)
+                risk_analysis = self.llm.analyze_credit_risk(
+                    company_data,
+                    as_of_date=self.as_of_date,
+                    weights=self.weights
+                )
 
-        return risk_analysis
+                # Add additional context
+                risk_analysis["data_quality"] = self._assess_data_quality(company_data)
+                risk_analysis["traditional_signals"] = self._get_traditional_signals(
+                    company_data
+                )
+
+                # Cache the result
+                cache_manager.set("risk_prediction", cache_key, risk_analysis)
+
+                return risk_analysis
+
+            except Exception as e:
+                logger.warning(f"Attempt {attempt + 1} failed for {ticker}: {e}")
+                if attempt < max_retries - 1:  # Don't sleep on the last attempt
+                    # Exponential backoff with jitter
+                    delay = (2 ** attempt) + random.uniform(0.1, 1.0)
+                    time.sleep(delay)
+                else:
+                    logger.error(f"All {max_retries} attempts failed for {ticker}. Returning error result.")
+                    
+                    # Return error result that maintains the expected structure
+                    error_result = {
+                        "ticker": ticker,
+                        "risk_score": None,
+                        "risk_level": "ERROR",
+                        "key_risk_factors": ["Failed to analyze after multiple attempts"],
+                        "confidence_level": "Low",
+                        "reasoning": f"Error occurred during risk prediction: {str(e)}",
+                        "data_quality": {"data_completeness": 0},
+                        "traditional_signals": {},
+                        "error": str(e)
+                    }
+                    
+                    # Cache the error result to prevent repeated attempts in short term
+                    cache_manager.set("risk_prediction", cache_key, error_result)
+                    
+                    return error_result
 
     def predict_batch(self, tickers: List[str]) -> List[Dict[str, Any]]:
         """

@@ -5,6 +5,7 @@ import pandas as pd
 from typing import Dict
 from datetime import datetime, timedelta
 from loguru import logger
+from ..utils import cache_manager
 
 
 class MarketDataCollector:
@@ -22,6 +23,14 @@ class MarketDataCollector:
         Returns:
             Dictionary with market indicators
         """
+        # Create cache key based on ticker and days
+        cache_key = {"ticker": ticker, "days": days, "method": "get_market_indicators"}
+        cached_result = cache_manager.get("market_data", cache_key)
+        
+        if cached_result is not None:
+            logger.info(f"Using cached market indicators for {ticker}")
+            return cached_result
+
         try:
             stock = yf.Ticker(ticker)
 
@@ -32,7 +41,12 @@ class MarketDataCollector:
 
             if hist.empty:
                 logger.warning(f"No historical data for {ticker}")
-                return {}
+                empty_result = {}
+                
+                # Cache the empty result too to avoid repeated failed attempts
+                cache_manager.set("market_data", cache_key, empty_result)
+                
+                return empty_result
 
             # Calculate indicators
             current_price = hist["Close"].iloc[-1]
@@ -66,11 +80,20 @@ class MarketDataCollector:
             }
 
             logger.info(f"Collected market indicators for {ticker}")
+            
+            # Cache the result
+            cache_manager.set("market_data", cache_key, indicators)
+            
             return indicators
 
         except Exception as e:
             logger.error(f"Error collecting market data for {ticker}: {e}")
-            return {}
+            
+            # Return empty dict but also cache it to prevent repeated attempts in short term
+            error_result = {"error": str(e)}
+            cache_manager.set("market_data", cache_key, error_result)
+            
+            return error_result
 
     @staticmethod
     def get_recent_price_action(ticker: str, days: int = 30) -> pd.DataFrame:

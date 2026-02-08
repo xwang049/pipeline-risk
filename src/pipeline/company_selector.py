@@ -4,8 +4,11 @@ import json
 from datetime import datetime
 from typing import List, Dict
 from loguru import logger
+import time
+import random
 
 from ..llm import LLMInterface
+from ..utils import cache_manager
 
 
 class CompanySelector:
@@ -40,6 +43,19 @@ class CompanySelector:
         Returns:
             List of company ticker symbols (verified as tradeable)
         """
+        # Create cache key based on parameters
+        cache_key = {
+            "num_companies": num_companies,
+            "market": market,
+            "as_of_date": as_of_date,
+            "method": "select_high_risk_companies"
+        }
+        cached_result = cache_manager.get("company_selection", cache_key)
+        
+        if cached_result is not None:
+            logger.info(f"Using cached company selection for {market} market")
+            return cached_result
+
         if as_of_date:
             logger.info(
                 f"Using LLM to select {num_companies} high-risk companies from {market} market (as of {as_of_date})"
@@ -55,22 +71,46 @@ class CompanySelector:
         prompt = self._create_selection_prompt(request_count, market, as_of_date)
         system_prompt = "You are an expert financial analyst specializing in credit risk and distressed companies."
 
-        response = self.llm.generate(prompt, system_prompt)
-        companies = self._parse_company_list(response)
+        # Implement retry mechanism with exponential backoff
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = self.llm.generate(prompt, system_prompt)
+                companies = self._parse_company_list(response)
 
-        logger.info(f"LLM suggested {len(companies)} companies, validating...")
+                logger.info(f"LLM suggested {len(companies)} companies, validating...")
 
-        # Validate companies are currently trading
-        valid_companies = self._validate_companies(companies)
+                # Validate companies are currently trading
+                valid_companies = self._validate_companies(companies)
 
-        logger.info(f"After validation: {len(valid_companies)} valid companies")
+                logger.info(f"After validation: {len(valid_companies)} valid companies")
 
-        if len(valid_companies) < num_companies:
-            logger.warning(
-                f"Only found {len(valid_companies)} valid companies, requested {num_companies}"
-            )
+                if len(valid_companies) < num_companies:
+                    logger.warning(
+                        f"Only found {len(valid_companies)} valid companies, requested {num_companies}"
+                    )
 
-        return valid_companies[:num_companies]
+                result = valid_companies[:num_companies]
+                
+                # Cache the result
+                cache_manager.set("company_selection", cache_key, result)
+                
+                return result
+                
+            except Exception as e:
+                logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:  # Don't sleep on the last attempt
+                    # Exponential backoff with jitter
+                    delay = (2 ** attempt) + random.uniform(0.1, 1.0)
+                    time.sleep(delay)
+                else:
+                    logger.error(f"All {max_retries} attempts failed for company selection. Using fallback.")
+                    
+                    # Return fallback companies if all retries fail
+                    fallback_companies = [
+                        "BYND", "AMC", "PLUG", "NIO", "CVNA", "EXPR", "GME", "BBIG", "TSLA", "AAPL"
+                    ]
+                    return fallback_companies[:num_companies]
 
     def _create_selection_prompt(self, num_companies: int, market: str, as_of_date: str = None) -> str:
         """Create prompt for LLM to select companies"""

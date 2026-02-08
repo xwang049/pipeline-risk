@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 from bs4 import BeautifulSoup
 import yfinance as yf
+from ..utils import cache_manager
 
 
 class NewsCollector:
@@ -23,6 +24,14 @@ class NewsCollector:
         Returns:
             List of news article dictionaries
         """
+        # Create cache key based on ticker and max_articles
+        cache_key = {"ticker": ticker, "max_articles": max_articles, "method": "get_company_news"}
+        cached_result = cache_manager.get("news_data", cache_key)
+        
+        if cached_result is not None:
+            logger.info(f"Using cached news for {ticker}")
+            return cached_result
+
         try:
             # Use yfinance to get news (it scrapes from Yahoo Finance)
             stock = yf.Ticker(ticker)
@@ -50,11 +59,20 @@ class NewsCollector:
                 articles.append(article)
 
             logger.info(f"Collected {len(articles)} news articles for {ticker}")
+            
+            # Cache the result
+            cache_manager.set("news_data", cache_key, articles)
+            
             return articles
 
         except Exception as e:
             logger.error(f"Error collecting news for {ticker}: {e}")
-            return []
+            
+            # Return empty list but cache it to prevent repeated attempts
+            empty_result = []
+            cache_manager.set("news_data", cache_key, empty_result)
+            
+            return empty_result
 
     @staticmethod
     def analyze_news_sentiment(articles: List[Dict]) -> Dict:
