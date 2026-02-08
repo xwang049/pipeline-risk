@@ -1,0 +1,65 @@
+# Credit Risk Prediction Scenario Configuration
+
+scenario:
+  name: credit_risk_prediction
+  description: "Predict credit risk for companies over next 7 days"
+
+  # Company selection
+  selection_mode: auto  # auto (LLM-based) or manual
+  num_companies: 5
+  market: US
+
+  # Manual company list (only used if selection_mode: manual)
+  companies:
+    - AAPL
+    - TSLA
+    - GME
+
+  # Time-travel for backtesting
+  as_of_date: null  # null for real-time, or "2026-02-01" for backtesting
+
+  # Feature weights
+  weights:
+    financial_metrics: 0.50  # Most important
+    market_signals: 0.35
+    news_sentiment: 0.15     # Least - often noise
+
+  # Data sources to use
+  data_sources:
+    - type: yahoo
+      enabled: true
+      config:
+        metrics: [debt_to_equity, current_ratio, roe]
+        cache_ttl: 3600
+
+    - type: news
+      enabled: true
+      config:
+        max_articles: 20
+        lookback_days: 30
+        cache_ttl: 3600
+
+    - type: local_kb
+      enabled: false  # Enable when knowledge base is ready
+      config:
+        db_path: data/knowledge_base.db
+        db_type: sqlite
+        cache_ttl: 86400
+
+    - type: lab_db
+      enabled: false  # Enable when lab access is granted
+      config:
+        connection_string: null
+        host: null
+        port: 5432
+        database: lab_data
+
+# Evaluation (future)
+evaluation:
+  metrics:
+    - f1_score
+    - matthews_correlation
+
+  ground_truth:
+    source: none  # none, manual, or database
+    file: null
