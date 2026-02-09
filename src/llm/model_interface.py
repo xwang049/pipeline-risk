@@ -208,12 +208,24 @@ class LLMInterface:
         Returns:
             Parsed JSON dictionary
         """
-        # Strategy 1: Extract from markdown code blocks
-        json_str = self._extract_json_from_markdown(response)
+        # DEBUG: Log the raw response
+        logger.info(f"\n{'='*60}")
+        logger.info(f"LLM RAW RESPONSE DEBUG")
+        logger.info(f"{'='*60}")
+        logger.info(f"Length: {len(response)} characters")
+        logger.info(f"\nFirst 800 characters:")
+        logger.info(response[:800])
+        logger.info(f"\n... (middle truncated) ...\n")
+        logger.info(f"Last 300 characters:")
+        logger.info(response[-300:])
+        logger.info(f"{'='*60}\n")
 
-        # Strategy 2: Try to parse as-is
-        if not json_str:
-            json_str = response.strip()
+        # Strategy 1: Try to parse response directly (for raw JSON)
+        json_str = response.strip()
+
+        # Strategy 2: Extract from markdown code blocks if direct parsing fails
+        if not json_str.startswith('{'):
+            json_str = self._extract_json_from_markdown(response)
 
         # Strategy 3: Try multiple parsing approaches
         parse_attempts = [

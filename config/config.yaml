@@ -8,7 +8,7 @@ llm:
   # model: "gpt-4o-mini"              # OpenAI (~$0.15/1M tokens)
   # model: "claude-3-5-haiku-20241022" # Anthropic (~$1/1M tokens)
   temperature: 0.1
-  max_tokens: 4000
+  max_tokens: 8192  # Increased to reduce truncation risk
 
 # Data Sources
 data_sources:

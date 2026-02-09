@@ -94,8 +94,11 @@ not predictive, and contains significant noise.
 
 5. **Confidence Level**: Rate your confidence in this assessment (Low/Medium/High)
 
-Please provide your analysis in a structured JSON format:
-```json
+IMPORTANT: Provide ONLY a JSON object as your response. Do not include any explanatory text,
+analysis, or commentary before or after the JSON. Start directly with {{ and end with }}.
+Do not wrap the JSON in markdown code blocks. Output raw JSON only.
+
+Required JSON format:
 {{
     "risk_score": <0-100>,
     "risk_level": "<Very Low/Low/Moderate/High/Very High>",
@@ -115,9 +118,8 @@ Please provide your analysis in a structured JSON format:
         "default_risk": <0-1>
     }},
     "confidence_level": "<Low/Medium/High>",
-    "reasoning": "Brief explanation of your analysis"
+    "reasoning": "Brief explanation (2-3 sentences max)"
 }}
-```
 """
         return prompt
 
