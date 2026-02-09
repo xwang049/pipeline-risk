@@ -38,15 +38,6 @@ python main.py
 python main.py --as-of-date 2026-02-01 --companies 5
 ```
 
-### 2. Automated Daily Runs (Production)
-
-```bash
-# Deploy with Prefect - runs daily at 8:00 AM
-python prefect_pipeline.py serve
-```
-
-See [PREFECT_DEPLOYMENT.md](PREFECT_DEPLOYMENT.md) for detailed deployment guide.
-
 ## How It Works
 
 ```
